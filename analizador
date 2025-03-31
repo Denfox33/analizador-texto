@@ -1,0 +1,38 @@
+from fastapi import FastAPI, UploadFile, File
+import spacy
+import pdfplumber
+from typing import Dict
+
+app = FastAPI()
+
+# Cargar modelo de procesamiento de lenguaje natural
+nlp = spacy.load("en_core_web_sm")
+
+def extract_text_from_pdf(pdf_file) -> str:
+    """Extrae texto de un archivo PDF"""
+    text = ""
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
+    return text
+
+def analyze_resume(text: str) -> Dict[str, any]:
+    """Analiza el texto del CV y extrae información relevante"""
+    doc = nlp(text)
+    word_count = len(text.split())
+    named_entities = [(ent.text, ent.label_) for ent in doc.ents]
+    
+    return {
+        "word_count": word_count,
+        "named_entities": named_entities,
+    }
+
+@app.post("/analyze")
+async def analyze_cv(file: UploadFile = File(...)):
+    """Endpoint para analizar un CV"""
+    if file.content_type == "application/pdf":
+        text = extract_text_from_pdf(file.file)
+        analysis = analyze_resume(text)
+        return {"filename": file.filename, "analysis": analysis}
+    else:
+        return {"error": "Formato no soportado. Solo se aceptan PDFs."}
